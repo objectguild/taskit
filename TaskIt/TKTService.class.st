@@ -76,6 +76,7 @@ Class {
 
 { #category : #starting }
 TKTService >> doStop [
+	self crTrace: self name , ' [doStop]'.
 	self tearDown.
 	(TKTNewProcessTaskRunner new 
 		future: [ self kill ]) 
@@ -105,6 +106,7 @@ TKTService >> iterateService [
 
 { #category : #private }
 TKTService >> kill [
+	self crTrace: self name , ' [kill]'.
 	TKTConfiguration serviceManager removeService: self.
 	worker stop
 ]
@@ -149,6 +151,7 @@ TKTService >> process [
 
 { #category : #starting }
 TKTService >> restart [
+	self crTrace: self name , ' [restart]'.
 	self stop.
 	0.5 second wait.
 	stopRequested := false.
@@ -171,6 +174,7 @@ TKTService >> setUp [
 
 { #category : #starting }
 TKTService >> start [
+	self crTrace: self name , ' [start]'.
 	stopRequested := false.
 	stopCallbacks := Set new.
 	self worker taskQueue: AtomicSharedQueue new.
@@ -199,6 +203,7 @@ TKTService >> stepService [
 { #category : #starting }
 TKTService >> stop [
 	| futureStop |
+	self crTrace: self name , ' [stop]'.
 	futureStop := TKTFuture new.
 	self onStoppedDo: [ :v | futureStop deploySuccess: self ].
 	stopRequested := true.
