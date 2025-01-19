@@ -145,8 +145,8 @@ The andThen: combinator allows to chain several futures to a single future's val
 This combinator is meant to enforce the order of execution of several actions, and this it is mostly for side-effect purposes where we want to guarantee such order.
 "
 Class {
-	#name : #TKTFuture,
-	#superclass : #Object,
+	#name : 'TKTFuture',
+	#superclass : 'Object',
 	#instVars : [
 		'result',
 		'valueSemaphore',
@@ -154,55 +154,100 @@ Class {
 		'exceptionCallbacks',
 		'runner'
 	],
-	#category : #'TaskIt-Futures'
+	#category : 'TaskIt-Futures',
+	#package : 'TaskIt',
+	#tag : 'Futures'
 }
 
-{ #category : #'instance creation' }
+{ #category : 'as yet unclassified' }
+TKTFuture class >> all: aCollection [
+	"Create a all future from aCollection of futures. The all future resolves if all of
+	the futures in aCollection resolve. The values given to the success handler are the
+	values of the futures in aCollection in the same order they appear in aCollection. The
+	first future in aCollection that fails marks this future as failed."
+	| results future |
+	results := OrderedCollection new: aCollection size.
+	future := self new.
+	aCollection withIndexDo: [ :each :index | 
+		each onSuccessDo: [ :value | 
+			results add: index -> value.
+			(results size = aCollection size) ifTrue: [
+				future deploySuccess: (results sorted collect: #value) asArray ] ].
+		each onFailureDo: [ :fail | 
+			future deployFailure: fail ] ].
+	^ future
+]
+
+{ #category : 'as yet unclassified' }
+TKTFuture class >> any: aCollection [
+	"Create any future from aCollection of futures. The any future resolves if any of
+	the futures in aCollection resolves. The value given to the success handler is the
+	value of the future that resolved. "
+	| future errors |
+	future := self new.
+	errors := OrderedCollection new: aCollection size.
+	aCollection withIndexDo: [ :each :index | 
+		each onSuccessDo: [ :value | 
+			"At the moment just ignore every running future if the any has been resolved"
+			future isFinished ifFalse: [  
+				"first success on the given futures makes the any future succeed"
+				future deploySuccess: value  ] ].
+		each onFailureDo: [ :failure | 
+			future isFinished ifFalse: [
+				errors add: index -> failure.
+				"If the errors collection has the same size as the input collect this is the last 
+				future and all of them were errors. So we deploy the failure of this any future"
+				(errors size = aCollection size) ifTrue: [  
+					future deployFailure: (errors sorted collect: #value) ] ] ] ].
+	^ future
+]
+
+{ #category : 'instance creation' }
 TKTFuture class >> doing: aBlock [
 
 	^ TKTConfiguration runner future: aBlock
 ]
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 TKTFuture class >> fromCollectionOfFutures: aCollectionOfFutures [
 
 	^ self
 		reduceCollectionOfFutures: aCollectionOfFutures
-		with: [ :acum :each | acum add: each. acum ] 
+		with: [ :acum :each | acum add: each. acum ]
 ]
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 TKTFuture class >> of: aValue [
 
 	^ self new deploySuccess: aValue
 ]
 
-{ #category : #'instance creation' }
+{ #category : 'instance creation' }
 TKTFuture class >> reduceCollectionOfFutures: aCollectionOfFutures with: aBlock [
 
 	^ aCollectionOfFutures
-		inject: (TKTFuture of: OrderedCollection new)
+		inject: (self of: OrderedCollection new)
 		into: [ :facum :feach | facum flatCollect: [ :acum | 
 				feach collect: [ :each | aBlock value: acum value: each ] ] ]
 ]
 
-{ #category : #callbacks }
+{ #category : 'callbacks' }
 TKTFuture >> addFailureCallback: aBlockClosure [
 
 	exceptionCallbacks add: aBlockClosure
 ]
 
-{ #category : #callbacks }
-TKTFuture >> addSuccessCallback: aBlockClosure [ 
-	
+{ #category : 'callbacks' }
+TKTFuture >> addSuccessCallback: aBlockClosure [
+
 	resultCallbacks add: aBlockClosure
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> andThen: aBlockClosure [ 
 	
 	| future |
-	future := TKTFuture new.
+	future := self newWithSameRunner.
 	self onSuccessDo: [ :got | 
 		[ aBlockClosure value: got ]
 			on: Error do: [ :e | "Nothing?" ].
@@ -211,11 +256,11 @@ TKTFuture >> andThen: aBlockClosure [
 	^ future
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> collect: aBlockClosure [
+
 	| future |
-	future := TKTFuture new.
-	future runner: runner.
+	future := self newWithSameRunner.
 	self
 		onSuccessDo: [ :got | 
 			[ future deploySuccess: (aBlockClosure value: got) ]
@@ -225,7 +270,7 @@ TKTFuture >> collect: aBlockClosure [
 	^ future
 ]
 
-{ #category : #deployment }
+{ #category : 'deployment' }
 TKTFuture >> deployFailure: aValue [
 	self installResult: (TKTFutureFailure new value: aValue).
 	exceptionCallbacks
@@ -233,7 +278,7 @@ TKTFuture >> deployFailure: aValue [
 	valueSemaphore signal
 ]
 
-{ #category : #deployment }
+{ #category : 'deployment' }
 TKTFuture >> deploySuccess: aValue [
 	self installResult: (TKTFutureSuccess new value: aValue).
 	resultCallbacks
@@ -241,19 +286,18 @@ TKTFuture >> deploySuccess: aValue [
 	valueSemaphore signal
 ]
 
-{ #category : #combinators }
-TKTFuture >> fallbackTo: aFallbackFuture [ 
-	
+{ #category : 'combinators' }
+TKTFuture >> fallbackTo: aFallbackFuture [
+
 	^ self recoverWith: [ :error | aFallbackFuture ]
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> firstCompleteOf: anotherFuture [
 	
 	| finished future |
 	finished := false.
-	future := TKTFuture new.
-	future runner: runner.
+	future := self newWithSameRunner.
 	self onSuccessDo: [ :v |
 		finished ifFalse: [
 			finished := true.
@@ -273,12 +317,45 @@ TKTFuture >> firstCompleteOf: anotherFuture [
 	^ future
 ]
 
-{ #category : #combinators }
+{ #category : 'callback' }
+TKTFuture >> firstSuccessfulCompleteOf: anotherFuture [
+	| finished returnFuture oneFinished |
+	oneFinished := false.
+	finished := false.
+	returnFuture := TKTFuture new.
+	returnFuture runner: runner.
+	self
+		onSuccessDo: [ :v | 
+			finished
+				ifFalse: [ finished := true.
+					returnFuture deploySuccess: v ] ].
+	self
+		onFailureDo: [ :v | 
+			finished
+				ifFalse: [ oneFinished
+						ifTrue: [ finished := true.
+							returnFuture deployFailure: v freeze ]
+						ifFalse: [ oneFinished := true ] ] ].
+	anotherFuture
+		onSuccessDo: [ :v | 
+			finished
+				ifFalse: [ finished := true.
+					returnFuture deploySuccess: v ] ].
+	anotherFuture
+		onFailureDo: [ :v | 
+			finished
+				ifFalse: [ oneFinished
+						ifTrue: [ finished := true.
+							returnFuture deployFailure: v freeze ]
+						ifFalse: [ oneFinished := true ] ]  ].
+	^ returnFuture
+]
+
+{ #category : 'combinators' }
 TKTFuture >> flatCollect: aBlockClosure [ 
 	
 	| future |
-	future := TKTFuture new.
-	future runner: runner.
+	future := self newWithSameRunner.
 	self onSuccessDo: [ :got | [(aBlockClosure value: got)
 		onSuccessDo: [ :got2 | future deploySuccess: got2 ];
 		onFailureDo: [ :error | future deployFailure: error freeze ]]
@@ -287,7 +364,7 @@ TKTFuture >> flatCollect: aBlockClosure [
 	^ future
 ]
 
-{ #category : #initialization }
+{ #category : 'initialization' }
 TKTFuture >> initialize [
 
 	super initialize.
@@ -297,10 +374,10 @@ TKTFuture >> initialize [
 	valueSemaphore := Semaphore new.
 
 	exceptionCallbacks := OrderedCollection new.
-	resultCallbacks := OrderedCollection new.
+	resultCallbacks := OrderedCollection new
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 TKTFuture >> installResult: aResult [
 
 	result isFinished
@@ -308,30 +385,37 @@ TKTFuture >> installResult: aResult [
 	result := aResult
 ]
 
-{ #category : #testing }
+{ #category : 'testing' }
 TKTFuture >> isFailure [
 
 	^ result isFailure
 ]
 
-{ #category : #testing }
+{ #category : 'testing' }
 TKTFuture >> isFinished [
 
 	^ result isFinished
 ]
 
-{ #category : #testing }
+{ #category : 'testing' }
 TKTFuture >> isSuccess [
 
 	^ result isSuccess
 ]
 
-{ #category : #combinators }
+{ #category : 'private' }
+TKTFuture >> newWithSameRunner [
+
+	^ self class new
+		  runner: runner;
+		  yourself
+]
+
+{ #category : 'combinators' }
 TKTFuture >> on: anError do: aBlockClosure [ 
 	
 	| future |
-	future := TKTFuture new.
-	future runner: runner.
+	future := self newWithSameRunner.
 	self onSuccessDo: [ :got | future deploySuccess: got ].
 	self onFailureDo: [ :error | 
 		(anError handles: error)
@@ -341,19 +425,19 @@ TKTFuture >> on: anError do: aBlockClosure [
 	^ future
 ]
 
-{ #category : #callbacks }
-TKTFuture >> onFailureDo: aBlockClosure [ 
-	
+{ #category : 'callbacks' }
+TKTFuture >> onFailureDo: aBlockClosure [
+
 	result onFailureDo: aBlockClosure inFuture: self
 ]
 
-{ #category : #callbacks }
+{ #category : 'callbacks' }
 TKTFuture >> onSuccessDo: aCallback [
 
 	result onSuccessDo: aCallback inFuture: self
 ]
 
-{ #category : #printing }
+{ #category : 'printing' }
 TKTFuture >> printOn: aStream [
 
 	super printOn: aStream.
@@ -365,12 +449,11 @@ TKTFuture >> printOn: aStream [
 		nextPutAll: ')'
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> recoverWith: aBlock [
 	
 	| future |
-	future := TKTFuture new.
-	future runner: runner.
+	future := self newWithSameRunner.
 	self onSuccessDo: [ :value | future deploySuccess: value ].
 	self onFailureDo: [ :error | | recoverFuture |
 		recoverFuture := aBlock value: error.
@@ -379,32 +462,31 @@ TKTFuture >> recoverWith: aBlock [
 	^ future
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 TKTFuture >> runner: aRunner [
 
 	runner := aRunner
 ]
 
-{ #category : #callbacks }
+{ #category : 'callbacks' }
 TKTFuture >> scheduleCallbackTask: aCallbackTask [
 	runner schedule: aCallbackTask
 ]
 
-{ #category : #combinators }
-TKTFuture >> select: aBlockClosure [ 
-	
-	^ self collect: [ :r | (aBlockClosure value: r) ifTrue: [ r ] ifFalse: [ NotFound signalFor: aBlockClosure ] ].
-	
+{ #category : 'combinators' }
+TKTFuture >> select: aBlockClosure [
+
+	^ self collect: [ :r | (aBlockClosure value: r) ifTrue: [ r ] ifFalse: [ NotFound signalFor: aBlockClosure ] ]
 ]
 
-{ #category : #synchronization }
+{ #category : 'synchronization' }
 TKTFuture >> synchronizeTimeout: aTimeout [
-	
+
 	self waitForCompletion: aTimeout.
 	^ result valueForFuture: self
 ]
 
-{ #category : #synchronization }
+{ #category : 'synchronization' }
 TKTFuture >> waitForCompletion: aTimeout [
 
 	self isFinished ifFalse: [ | expired |
@@ -412,14 +494,14 @@ TKTFuture >> waitForCompletion: aTimeout [
 		expired ifTrue: [ TKTTimeoutException signal ] ]
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> zip: secondFuture [
-	
+
 	^ self zip: secondFuture with: [ :a :b | Array with: a with: b ]
 ]
 
-{ #category : #combinators }
+{ #category : 'combinators' }
 TKTFuture >> zip: secondFuture with: aBlock [
-	
+
 	^ self flatCollect: [ :result1 | secondFuture collect: [ :result2 | aBlock value: result1 value: result2 ] ]
 ]

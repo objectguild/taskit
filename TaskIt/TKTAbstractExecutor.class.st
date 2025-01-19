@@ -4,65 +4,72 @@ I am an abstract class defining the basic behaviour and state to execute a task:
   - an exception handler meant to manage unhandled exception
 "
 Class {
-	#name : #TKTAbstractExecutor,
-	#superclass : #Object,
+	#name : 'TKTAbstractExecutor',
+	#superclass : 'Object',
 	#traits : 'TTaskExecutor',
 	#classTraits : 'TTaskExecutor classTrait',
 	#instVars : [
 		'exceptionHandler',
 		'busy'
 	],
-	#category : #'TaskIt-Kernel'
+	#category : 'TaskIt-Kernel',
+	#package : 'TaskIt',
+	#tag : 'Kernel'
 }
 
-{ #category : #accessing }
+{ #category : 'testing' }
+TKTAbstractExecutor class >> isAbstract [
+
+	^self == TKTAbstractExecutor
+]
+
+{ #category : 'accessing' }
 TKTAbstractExecutor >> exceptionHandler [
 	^ exceptionHandler
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 TKTAbstractExecutor >> exceptionHandler: aHandler [
-	
+
 	exceptionHandler := aHandler
 ]
 
-{ #category : #initialization }
+{ #category : 'initialization' }
 TKTAbstractExecutor >> initialize [
 	super initialize.
 	busy := false.
 	exceptionHandler := TKTConfiguration errorHandler
 ]
 
-{ #category : #'as yet unclassified' }
+{ #category : 'testing' }
 TKTAbstractExecutor >> isBusy [
 
 	^ busy
 ]
 
-{ #category : #'as yet unclassified' }
+{ #category : 'testing' }
 TKTAbstractExecutor >> isFree [
 
 	^ busy not
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 TKTAbstractExecutor >> noteBusy [
 
 	busy := true
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 TKTAbstractExecutor >> noteFree [
 
 	busy := false
 ]
 
-{ #category : #polimorfism }
+{ #category : 'polymorphism' }
 TKTAbstractExecutor >> start [
  " nothing to do "
 ]
 
-{ #category : #polimorfsms }
+{ #category : 'polymorphism' }
 TKTAbstractExecutor >> stop [
-
 ]
